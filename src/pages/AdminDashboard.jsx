@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api";
 import { clearUserSession, getStoredUser } from "../utils/authStorage";
@@ -17,6 +17,13 @@ const hotelCategories = [
   "Safety Concern",
   "Other",
 ];
+
+const extractError = (err, fallback) => {
+  const data = err.response?.data;
+  if (!data) return fallback;
+  if (typeof data === "string") return data;
+  return data.message || fallback;
+};
 
 function AdminDashboard() {
   const navigate = useNavigate();
@@ -40,13 +47,6 @@ function AdminDashboard() {
     staffId: "",
   });
 
-  const [newComplaint, setNewComplaint] = useState({
-    title: "",
-    description: "",
-    category: hotelCategories[0],
-    userId: "",
-  });
-
   const [newUser, setNewUser] = useState({
     name: "",
     email: "",
@@ -61,14 +61,7 @@ function AdminDashboard() {
     role: "USER",
   });
 
-  const extractError = (err, fallback) => {
-    const data = err.response?.data;
-    if (!data) return fallback;
-    if (typeof data === "string") return data;
-    return data.message || fallback;
-  };
-
-  const loadData = async (currentFilter) => {
+  const loadData = useCallback(async (currentFilter) => {
     const complaintUrl =
       currentFilter === "ALL"
         ? "/admin/complaints"
@@ -88,7 +81,7 @@ function AdminDashboard() {
     } catch (err) {
       setError(extractError(err, "Failed to load data."));
     }
-  };
+  }, []);
 
   const userOptions = useMemo(() => users.filter((u) => u.role === "USER"), [users]);
 
@@ -97,11 +90,11 @@ function AdminDashboard() {
     if (!savedUser) return;
     setUser(savedUser);
     loadData("ALL");
-  }, []);
+  }, [loadData]);
 
   useEffect(() => {
     if (user) loadData(statusFilter);
-  }, [statusFilter, user]);
+  }, [statusFilter, user, loadData]);
 
   const staffLookup = useMemo(() => {
     return staffMembers.reduce((acc, s) => { acc[s.id] = s.name; return acc; }, {});
@@ -115,30 +108,6 @@ function AdminDashboard() {
       await loadData(statusFilter);
     } catch (err) {
       setError(extractError(err, "Failed to assign complaint."));
-    }
-  };
-
-  const handleNewComplaintChange = (e) => {
-    const { name, value } = e.target;
-    setNewComplaint((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleCreateComplaint = async (e) => {
-    e.preventDefault();
-    setError("");
-    setMessage("");
-    try {
-      await api.post("/admin/complaints", {
-        title: newComplaint.title,
-        description: newComplaint.description,
-        category: newComplaint.category,
-        userId: Number(newComplaint.userId),
-      });
-      setMessage("Complaint created successfully.");
-      setNewComplaint({ title: "", description: "", category: hotelCategories[0], userId: "" });
-      await loadData(statusFilter);
-    } catch (err) {
-      setError(extractError(err, "Failed to create complaint."));
     }
   };
 
@@ -300,6 +269,9 @@ function AdminDashboard() {
         <h2>Admin Dashboard</h2>
         <button onClick={logout}>Logout</button>
       </header>
+
+      {message && <p className="success-text">{message}</p>}
+      {error && <p className="error-text">{error}</p>}
 
       <section className="panel analytics-grid">
         <div><strong>Total:</strong> {analytics.totalComplaints ?? 0}</div>
